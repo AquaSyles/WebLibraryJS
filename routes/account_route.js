@@ -21,13 +21,9 @@ accountRouter.post('/login', (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
 
-    const cookies = req.cookies;
-
-    if (cookies.token) {
-        if (verifyToken(cookies.token)) {
-            res.status(200).send('Already authenticated');
-            return;
-        }
+    if (req.user.isAuth) {
+        res.status(200).send('Already authenticated');
+        return;
     }
 
     authenticate(username, password)
