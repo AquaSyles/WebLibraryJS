@@ -1,0 +1,38 @@
+body {
+    background-color: aqua;
+    display: flex;
+    justify-content: center;
+}
+
+.input_container {
+    margin-top: 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 25rem;
+}
+
+input {
+    margin-bottom: 5px;
+    padding: 0.5rem;
+    width: 20rem;
+    height: 3rem;
+    font-size: large;
+
+    border: 1px solid #ccc;
+    border-radius: 0.3rem;
+}
+
+button {
+    border: 1px solid #ccc;
+    border-radius: 0.3rem;
+    background-color: rgb(19, 134, 32);
+    border-color: green;
+
+    width: 6rem;
+    height: 2rem;
+}
+
+button:hover {
+    cursor: pointer;
+}

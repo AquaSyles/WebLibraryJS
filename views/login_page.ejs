@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/account/static/css/account.css">
+    <title>Login</title>
+</head>
+<body>
+    <div class="input_container">
+        <input type="text" name="username" id="username" placeholder="username">
+        <input type="text" name="password" id="password" placeholder="password">
+        <button onclick="login()">Login</button>
+    </div>
+</body>
+<script>
+    function login() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        fetch('/account/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({username: username, password: password})
+        })
+        .then(response => {
+            return response.text();
+        })
+        .then(data => {
+            console.log(data)
+        })
+    }
+</script>
+</html>
