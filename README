@@ -1,7 +1,6 @@
 # WebLibraryJS
 
 ## Dependencies
-```json
 "dependencies": {
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -12,12 +11,10 @@
     "mysql2": "^3.12.0",
     "nodemon": "^3.1.9"
 }
-```
 
 ## Running the Project
 You can run the project, with the following script:
-```json
+
 "dev": nodemon -r dotenv/config src/index.js dotenv_config_path=$ENV_PATH
-```
 
 Make sure to set the `ENV_PATH` environment variable to the path of your `.env` file before running the script.
