@@ -17,4 +17,4 @@ You can run the project, with the following script:
 
 "dev": nodemon -r dotenv/config src/index.js dotenv_config_path=$ENV_PATH
 
-Make sure to set the `ENV_PATH` environment variable to the path of your `.env` file before running the script.
+Make sure to set `ENV_PATH` to the path of your `.env` file before running the script.
