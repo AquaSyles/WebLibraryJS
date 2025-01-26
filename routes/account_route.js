@@ -3,7 +3,6 @@ const accountModel = require('./../db/account_model');
 const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { options } = require('../server');
 
 accountRouter = Router();
 
@@ -40,14 +39,16 @@ accountRouter.post('/login', (req, res) => {
 });
 
 async function authenticate(username, password) { // returns 0 or user object
-    const user = await accountModel.select(['*'], {'username': "'"+username+"'"});
+    console.log('test')
+    const user = await accountModel.select().where('username', '=', username).one();
+    console.log(user);
     const hashedPassword = hashPassword(password);
     if (!user) {
         return 0;
     }
 
     try {
-        const authenticPassword = user[0].password;
+        const authenticPassword = user.password;
         if (authenticPassword === hashedPassword) {
             return {username: username, password: hashedPassword};
         } else {
@@ -67,20 +68,6 @@ function createToken(userObj) {
     }
 
     return jwt.sign(userObj, process.env.SECRET_KEY, options);
-}
-
-function verifyToken(token) { // returns decoded token or 0 (FAIL)
-    let options = {
-        algorithm: 'HS256',
-        expiresIn: '1h'
-    }
-
-    try {
-        return jwt.verify(token, process.env.SECRET_KEY, options);
-    } catch (error) {
-        console.log('Error:', error);
-        return 0;
-    }
 }
 
 function hashPassword(password) {

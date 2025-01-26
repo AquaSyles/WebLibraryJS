@@ -5,8 +5,85 @@ DATABASE_USER = process.env.DATABASE_USER
 DATABASE_PASSWORD = process.env.DATABASE_PASSWORD
 DATABASE_NAME = process.env.DATABASE_NAME
 
-class DatabaseController {
-    constructor() {
+class QueryObject {
+    constructor(query, database, values = []) {
+        this.query = query;
+        this.queryValues = values;
+        this.database = database;
+        this.conditional = false;
+    }
+
+    queryWrapper() {
+        return new Promise((resolve) => {
+            this.database.query(this.query, this.queryValues, (error, result) => {
+                if (error) {
+                    console.log(error.sqlMessage)
+                    resolve(0);
+                }
+                resolve(result);
+            });
+        });
+    }
+
+    result() {
+        //console.log(this.query, this.queryValues);
+        return this.queryWrapper()
+        .then(result => {
+            //console.log("Affected Rows:", result.affectedRows, "Insert ID:", result.insertId);
+            return result.length || result.affectedRows || result.insertId ? 1 : 0;
+        })
+    }
+
+    all() {
+        return new Promise((resolve) => {
+            this.database.query(this.query, this.queryValues, (error, results) => {
+                if (error) {
+                    console.log(error.sqlMessage)
+                    resolve([]);
+                }
+                resolve(results);
+            });
+        });
+    }
+
+    one() {
+        return new Promise((resolve) => {
+            console.log(this.query, this.queryValues);
+            this.database.query(this.query, this.queryValues, (error, results) => {
+                if (error) {
+                    console.log(error.sqlMessage)
+                    resolve([]);
+                }
+                resolve(results[0]);
+            });
+        });
+    }
+
+    where(column, operator, value) {
+        this.query = this.conditional ? this.query : this.query + ' WHERE'; // Only adds WHERE if no conditions are before it
+        this.query += ` ${column} ${operator} ?`;
+        value = isNaN(value) ? value : parseInt(value); // if value is a number it's converted to an integer
+        this.queryValues.push(value);
+        return this;
+    }
+
+    and() {
+        this.query += ' AND';
+        this.conditional = true;
+        return this;
+    }
+
+    or() {
+        this.query += ' OR';
+        this.conditional = true;
+        return this;
+    }
+}
+
+class Orm {
+    constructor(table) {
+        this.table = table;
+
         this.database = mysql.createConnection({
             host: DATABASE_HOST,
             user: DATABASE_USER,
@@ -17,224 +94,76 @@ class DatabaseController {
         this.database.connect();
     }
 
-    async delete(tableName, filter) {
-        let query = `DELETE FROM ${tableName} ${this.#formatWhere(filter)}`
+    select(...selectors) { // Query Result: select ??, ?? from ??(TABLE)
+        let selectorMarks = selectors.length === 0 ? ['*'] : selectors.map(() => '??').join(', '); // generates ?? for the selectors and joins the array for when adding to the query
 
-        return new Promise((resolve) => {
-            this.database.query(query, (err) => {
-            if (err) {
-                console.log("Error:", err.sqlMessage);
-                resolve(0);
-            }
+        selectors.push(this.table) // doing this after generating the marks due to adding it manually in the query below
 
-            else {
-                resolve(1);
-            }
-            });
-        });
+        let query = `SELECT ${selectorMarks} FROM ??`;
+
+        return new QueryObject(query, this.database, selectors);
     }
 
-    async update(tableName, row, filter) {
-        let [columns, values] = this.#formatSqlRow(row);
-        columns = columns.split(', ');
+    delete() { // Query Result: DELETE FROM ??(TABLE)
+        let query = `DELETE FROM ??`
 
-        let query = `UPDATE ${tableName} SET `;
-        let counter = 1;
-        const end = columns.length;
-        for (let i = 0; i < columns.length; i++) {
-            query += columns[i] + ' = ' + values[i];
-            if (counter !== end) {
-                query += ', ';
-            }
-            counter++;
+        return new QueryObject(query, this.database, [this.table]);
+    }
+
+    update(row) { // Query Result: UPDATE ??(TABLE) SET ??=?, ??=?
+        let rowArray = [];
+        let rowArrayMarkers = []
+
+        for (const columnValue of Object.entries(row)) {
+            let key = columnValue[0];
+            let value = isNaN(columnValue[1]) ? columnValue[1] : parseInt(columnValue[1]);
+            rowArray.push(key, value); // if value is a number it's converted to an integer, and if it's a string we add ''
+            rowArrayMarkers.push('??' + ' = ' + '?');
+        }
+        rowArray.unshift(this.table)
+
+        rowArrayMarkers = rowArrayMarkers.join(', '); // makes it look nicer
+
+        let query = `UPDATE ?? SET ${rowArrayMarkers}`;
+        return new QueryObject(query, this.database, rowArray);
+    }
+
+    insert(row) { // Query Result: INSERT INTO ??(TABLE) (??, ??) VALUES (?, ?)
+        let columnValues = [];
+
+        let columnMarkers = [];
+        let valueMarkers = [];
+
+        for (const column of Object.keys(row)) {
+            columnValues.push(column);
+            columnMarkers.push('??');
         }
 
-        query += ' ' + this.#formatWhere(filter);
-
-        return new Promise((resolve) => {
-            this.database.query(query, (err, results) => {
-                if (err) {
-                    console.log(err.sqlMessage);
-                    resolve(0);
-                }
-
-                else {
-                    resolve(1);
-                }
-            });
-        });
-
-    }
-
-    async select(tableName, selector=['*'], filter=null, customQuery=null) {
-        let query;
-        if (customQuery) {
-            query = customQuery;
+        for (const value of Object.values(row)) {
+            columnValues.push(isNaN(value) ? value : parseInt(value)); // if value is a number it's converted to an integer, and if it's a string we add ''
+            valueMarkers.push('?');
         }
-        else {
-            query = `SELECT ${selector} FROM ${tableName}`;
-            if (filter) {
-                const where = this.#formatWhere(filter);
-                query += ' ' + where;
-            }
-        }
+        columnValues.unshift(this.table)
 
-        return new Promise((resolve) => {
-            this.database.query(query, (err, results) => {
-                if (err) {
-                    console.log(err.sqlMessage);
-                    resolve(0);
-                }
+        columnMarkers = columnMarkers.join(', '); // makes it look nicer
+        valueMarkers = valueMarkers.join(', ');
 
-                else if (results.length === 0) {
-                    resolve(0);
-                }
+        let query = `INSERT INTO ?? (${columnMarkers}) VALUES (${valueMarkers})`;
 
-                else {
-                    resolve(results);
-                }
-            });
-        });
+        return new QueryObject(query, this.database, columnValues);
     }
 
-    async insert(tableName, row) {
-        const [columns, values] = this.#formatSqlRow(row);
-        const valueMarkers = this.#getValueMarkers(values);
+    createTable(columns) { // CREATE TABLE IF NOT EXISTS ??(TABLE) (COLUMN VALUES CONTRAINTS...)
+        let parsedColumns = '';
+        Object.entries(columns).forEach(([column, value], index) => {
+            if (index !== 0) {parsedColumns += ', '};
+            parsedColumns += column + ' ' + value.join(' ');
+        })
 
-        const query = `INSERT INTO ${tableName} (${columns}) VALUES (${valueMarkers})`;
-        return new Promise((resolve) => {
-            this.database.query(query, values, (err, results) => {
-                if (err) {
-                    console.log(err.sqlMessage);
-                    resolve(0);
-                }
-                
-                else {
-                    resolve(1);
-                }
-            });
-        });
+        let query = `CREATE TABLE IF NOT EXISTS ?? (${parsedColumns})`
+
+        this.database.query(query, [this.table]);
     }
-
-    createTable(tableName, columns) {
-        const parsedColumns = this.#columnParser(columns);
-        let query = `CREATE TABLE IF NOT EXISTS ${tableName} (${parsedColumns})`
-
-        this.database.query(query);
-    }
-
-    #formatWhere(filter) {
-        let where = "WHERE ";
-        const filterObj = Object.entries(filter);
-
-        let counter = 1;
-        const end = filterObj.length;
-        for (const column of filterObj) {
-            let columnName = column[0];
-            const columnValue = column[1];
-
-            if (columnName.endsWith('<') || columnName.endsWith('>') || columnName.endsWith('~') || columnName.endsWith('=')){
-                const operator = ' ' + columnName.charAt(columnName.length - 1) + ' ';
-                columnName = columnName.slice(0, -1);
-
-                if (operator == ' ~ ') {
-                    where += columnName + ' like ' + '"' + columnValue + '"';
-                }
-
-                else {
-                    where += columnName + operator + columnValue;
-                }
-            }
-            
-            else {
-                where += columnName + ' = ' + columnValue;
-            }
-            
-            if (counter !== end) {
-                where += ' AND ';
-            }
-            counter++;
-        }
-        return where;
-    }
-
-    #formatSqlRow(row) {
-        let columns = "";
-        let values = [];
-
-        let counter = 1;
-        let end = Object.entries(row).length;
-        for (const [column, columnValue] of Object.entries(row)) {
-            columns += column;
-            values.push(columnValue);
-
-            if (counter !== end) {
-                columns += ', ';
-            }
-
-            counter++;
-        }
-
-        return [columns, values];
-    }
-
-    #getValueMarkers(values) {
-        let valueMarkers = "";
-
-        let counter = 1;
-        let end = values.length;
-        for (const value of values) {
-            valueMarkers += '?';
-
-            if (counter !== end) {
-                valueMarkers += ', ';
-            }
-
-            counter++;
-        }
-
-        return valueMarkers;
-    }
-
-    #columnParser(columns) {
-        let parsedColumns = "";
-
-        const columnsObject = Object.entries(columns);
-
-        let keyCounter = 1;
-        const keyEnd = columnsObject.length;
-        for (const [key, values] of columnsObject) {
-            parsedColumns += key + ' ';
-
-            let counter = 1;
-            let end = values.length;
-            for (const value of values) {
-                parsedColumns += value;
-
-                if (keyCounter !== keyEnd) {
-                    parsedColumns += counter == end ? ', ' : '';
-                }
-
-                if (counter !== end) {
-                    parsedColumns += ' ';
-                }
-
-                counter++;
-            }
-            keyCounter++;
-        }
-
-        return parsedColumns;
-    }
-
-    // create table
-    // select
-    // insert
-    // delete
-    // update
 };
 
-//databaseController = new DatabaseController(DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME);
-const databaseController = new DatabaseController();
-
-module.exports = databaseController;
+module.exports = Orm;
